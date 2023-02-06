@@ -1,4 +1,4 @@
-package internal
+package lightqueue
 
 import (
 	"github.com/petermattis/goid"

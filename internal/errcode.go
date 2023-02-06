@@ -1,8 +1,8 @@
-package internal
+package lightqueue
 
 type ErrObj struct {
-	Code uint64
-	Desc string
+	Code       uint64
+	Desc       string
 	SucceedNum int64
 }
 
@@ -11,11 +11,11 @@ func (e ErrObj) Error() string {
 }
 
 func Succeed(num int64) ErrObj {
-	return ErrObj{Code: 0, Desc:"Succeed", SucceedNum: num}
+	return ErrObj{Code: 0, Desc: "Succeed", SucceedNum: num}
 }
 
 func ZeroErr() ErrObj {
-	return ErrObj{Code: 100000, Desc:"Push or Pop zero num"}
+	return ErrObj{Code: 100000, Desc: "Push or Pop zero num"}
 }
 
 func QueueIsFull() ErrObj {

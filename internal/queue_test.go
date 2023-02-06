@@ -1,10 +1,13 @@
-package internal
+package lightqueue
 
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
+	"net/http"
+	_ "net/http/pprof"
 	"testing"
+	"time"
 )
 
 func TestQueue(t *testing.T) {
@@ -18,7 +21,7 @@ func TestQueue(t *testing.T) {
 	q.AddWorker()
 	ok, err = q.Pop(1, &res)
 	fmt.Println(res, ok, err, q.b)
-	assert.Equal(t, res, []Val(nil), "pop0 err")
+	assert.Equal(t, res, []Val{}, "pop0 err")
 
 	q.AddProducer()
 	ok, err = q.Push([]Val{"a", "b", "c", "d"})
@@ -36,10 +39,14 @@ func TestQueue(t *testing.T) {
 
 	ok, err = q.Pop(3, &res)
 	fmt.Println(res, ok, err, q.b)
-	assert.Equal(t, res, []Val{"a", "b", "c", "d"}, "pop3 err")
+	assert.Equal(t, res, []Val{"a", "b", "c"}, "pop3 err")
 }
 
 func TestMultiplyWorkers(t *testing.T) {
+	go func() {
+		http.ListenAndServe("0.0.0.0:8000", nil)
+	}()
+
 	q := Queue{}
 	q.Init()
 	eg := errgroup.Group{}
@@ -48,6 +55,14 @@ func TestMultiplyWorkers(t *testing.T) {
 	eg.Go(func() error {
 		q.AddWorker()
 		for {
+			for i := 0; i < 100; i++ {
+				ok, err := q.Pop(3, &res)
+				if !ok && err.Code == 100040 {
+					time.Sleep(time.Nanosecond * 50)
+					continue
+				}
+			}
+			time.Sleep(time.Second)
 			ok, err := q.Pop(3, &res)
 			if !ok && err.Code == 100040 {
 				return nil
@@ -60,7 +75,7 @@ func TestMultiplyWorkers(t *testing.T) {
 
 	q.AddProducer()
 	for i := 0; i < 10000; i++ {
-		ok, err := q.Push([]Val{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+		ok, err := q.BPush([]Val{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 		if ok {
 			p += 1
 			//time.Sleep(time.Millisecond)

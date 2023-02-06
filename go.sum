@@ -2,6 +2,8 @@ github.com/benbjohnson/clock v1.1.0 h1:Q92kusRqC1XV2MjkWETPvjJVqKetz1OzxZB7mHJLj
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/ibbd-dev/go-async-log v0.0.0-20171216130438-5ed575527eed h1:IjLidDYFbBWnri2ye2MYHQzrj6N9+UUmC9XG5iBKeqc=
+github.com/ibbd-dev/go-async-log v0.0.0-20171216130438-5ed575527eed/go.mod h1:F8236IIxTQretgQLgprvUdMI+hyDjVrtv8rYWcmP2GA=
 github.com/petermattis/goid v0.0.0-20221215004737-a150e88a970d h1:htwtWgtQo8YS6JFWWi2DNgY0RwSGJ1ruMoxY6CUUclk=
 github.com/petermattis/goid v0.0.0-20221215004737-a150e88a970d/go.mod h1:pxMtw7cyUw6B2bRH0ZBANSPg+AoSud1I1iyJHI69jH4=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=

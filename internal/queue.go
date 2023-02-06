@@ -1,15 +1,12 @@
-package internal
+package lightqueue
 
 import (
-	"fmt"
-	"go.uber.org/zap"
 	"lightqueue/internal/bitmap"
+	_ "net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
 )
-
-var log, _ = zap.NewProduction()
 
 const queueLen int64 = 32
 
@@ -25,14 +22,23 @@ type Queue struct {
 	b                 bitmap.Bitmap
 	resetSignal       int64
 	unblocking        uint32
-	blockChan         chan struct{}
-	blockNum          int64
+
+	blockPushChan        chan RecallPush
+	blockPushNum         int64
+	recallPushSignalChan chan struct{}
+}
+
+type RecallPush struct {
+	resCh chan ErrObj
+	elems []Val
 }
 
 func (q *Queue) Init() {
 	q.buf = make([]Val, queueLen, queueLen)
-	q.blockChan = make(chan struct{})
+	q.blockPushChan = make(chan RecallPush, queueLen)
+	q.recallPushSignalChan = make(chan struct{}, queueLen)
 	q.b.Init(uint64(queueLen))
+	q.initRecallPushG()
 }
 
 func (q *Queue) AddProducer() {
@@ -95,12 +101,29 @@ func (q *Queue) waitToCanPush(pos int64) {
 	}
 }
 
-func (q *Queue) BlockPush(elems []Val) {
-	if succeed, err := q.Push(elems); !succeed &&
+func (q *Queue) PushChan(elems []Val) chan ErrObj {
+	ch := make(chan ErrObj, 1)
+	succeed, err := q.Push(elems)
+	if !succeed &&
 		(err.Code == 100010 || err.Code == 100020) {
-		<-q.blockChan
-		atomic.AddInt64(&q.blockNum, 1)
+		rp := RecallPush{elems: elems}
+		rp.resCh = ch
+		q.blockPushChan <- rp
+		atomic.AddInt64(&q.blockPushNum, 1)
+	} else {
+		ch <- err
 	}
+	return ch
+}
+
+func (q *Queue) BPush(elems []Val) (bool, ErrObj) {
+	ch := q.PushChan(elems)
+	err := <-ch
+	var ok bool
+	if err.Code == 0 {
+		ok = true
+	}
+	return ok, err
 }
 
 func (q *Queue) Push(elems []Val) (bool, ErrObj) {
@@ -132,8 +155,8 @@ func (q *Queue) Push(elems []Val) (bool, ErrObj) {
 		q.waitToCanPush(pos)
 		q.buf[pos] = elems[i]
 		q.b.Set(uint64(pos))
-		fmt.Println("push: ", pos+1, " head: ", q.head, " tail: ", q.tail)
-		fmt.Println(q.b.String())
+		//logger.Info("push: %d head: %d tail: %d", pos+1, q.head, q.tail)
+		//logger.Info(q.b.String())
 		atomic.AddInt64(&q.count, 1)
 	}
 
@@ -173,7 +196,6 @@ func (q *Queue) waitToCanPop(pos int64) (dontWait bool) {
 		if ok := q.canPop(pos); ok {
 			return
 		}
-		//runtime.Gosched()
 
 		if retryTimes > 3 {
 			if q.p.CheckAllStop() {
@@ -220,24 +242,35 @@ func (q *Queue) Pop(popNum int64, receiver *[]Val) (bool, ErrObj) {
 			return true, Succeed(i)
 		}
 		q.b.Unset(uint64(pos))
-		fmt.Println("pop: ", pos+1, " head: ", q.head, " tail: ", q.tail)
-		fmt.Println(q.b.String())
+		//logger.Info("push: %d head: %d tail: %d", pos+1, q.head, q.tail)
+		//logger.Info(q.b.String())
 		*receiver = append(*receiver, q.buf[pos])
 		atomic.AddInt64(&q.count, -1)
 	}
 
 	// active block push worker
-	if q.blockNum != 0 {
+	if q.blockPushNum != 0 {
 		if q.Free() > queueLen/2 {
-			if ok := q.CAStoUnblock(); ok && q.Free() > queueLen/2 {
-				<-q.blockChan
-				atomic.AddInt64(&q.blockNum, -1)
+			if q.CAStoUnblock() && q.Free() > queueLen/2 && q.blockPushNum != 0 {
+				atomic.AddInt64(&q.blockPushNum, -1)
+				q.recallPushSignalChan <- struct{}{}
 				q.CASUnblocked()
 			}
 		}
 	}
 
 	return true, Succeed(popNum)
+}
+
+func (q *Queue) initRecallPushG() {
+	go func() {
+		for {
+			<-q.recallPushSignalChan
+			recallPush := <-q.blockPushChan
+			_, err := q.BPush(recallPush.elems)
+			recallPush.resCh <- err
+		}
+	}()
 }
 
 func (q *Queue) CAStoUnblock() bool {
